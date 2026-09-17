@@ -15,7 +15,7 @@
 name: Unittests & Auto-publish
 
 # Allow to trigger the workflow manually (e.g. when deps changes)
-on: [push, workflow_dispatch]
+on: [push, pull_request, workflow_dispatch]
 
 jobs:
   pytest-job:
@@ -45,6 +45,23 @@ jobs:
     - name: Run core tests
       run: pytest -vv -n auto
 
+  min-sklearn-job:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Install with the minimum supported scikit-learn
+      run: pip install -e '.[dev]' 'scikit-learn==1.6.0'
+    - name: Verify minimum version and estimator import
+      run: |
+        python -c "import sklearn; assert sklearn.__version__ == '1.6.0'; from tabfm.src.classifier_and_regressor import TabFMClassifier, TabFMRegressor"
+    - name: Test estimator parameter validation
+      run: pytest -q tabfm/src/estimator_parameters_test.py
+
   # Auto-publish when version is increased
   publish-job:
     # Only try to publish if:
@@ -53,7 +70,7 @@ jobs:
     if: |
       github.repository == 'google-research/tabfm'
       && github.ref == 'refs/heads/main'
-    needs: pytest-job  # Only publish after tests are successful
+    needs: [pytest-job, min-sklearn-job]  # Only publish after tests are successful
     runs-on: ubuntu-latest
     permissions:
       contents: write
